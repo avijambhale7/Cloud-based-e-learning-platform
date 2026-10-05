@@ -514,6 +514,8 @@ a {
 .thumb-Programming { background: linear-gradient(135deg, #34d399, #059669); }
 .thumb-Web { background: linear-gradient(135deg, #fb923c, #ec4899); }
 .thumb-Database { background: linear-gradient(135deg, #a78bfa, #7c3aed); }
+.thumb-DevOps { background: linear-gradient(135deg, #22d3ee, #0e7490); }
+.thumb-Security { background: linear-gradient(135deg, #f87171, #b91c1c); }
 .thumb-default { background: linear-gradient(135deg, #94a3b8, #475569); }
 
 /* ---------- Call to action (home) ---------- */
