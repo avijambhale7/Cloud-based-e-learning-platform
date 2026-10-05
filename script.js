@@ -247,7 +247,9 @@ function courseCard(c, inDashboard = false) {
   } else if (enrolled) {
     buttons = `<button class="btn btn-green" data-open="${c.id}">${p === 100 ? "✓ Completed" : "Continue →"}</button>`;
   } else {
-    buttons = `<button class="btn" data-enroll="${c.id}">Enroll Free</button>`;
+    buttons = `
+      <button class="btn" data-enroll="${c.id}">Enroll Free</button>
+      <button class="btn btn-ghost" data-open="${c.id}">Details</button>`;
   }
 
   return `
@@ -342,6 +344,7 @@ async function setUser(u) {
 async function enroll(id, button) {
   if (!user) {
     toast("Please login or sign up to enroll.");
+    hideModal("courseModal"); // so the login box isn't hidden behind it
     openAuth("signup");
     return;
   }
@@ -350,7 +353,9 @@ async function enroll(id, button) {
     progress[id] = [];
     refresh();
     toast("Enrolled! Happy learning 🎉", "success");
-    openCourse(id);
+    // Already looking at this course's details? Just unlock the lessons (keeps the video playing)
+    if (openCourseId === id) renderLessons(courses.find(x => x.id === id));
+    else openCourse(id);
   });
 }
 
@@ -465,20 +470,29 @@ async function videoFinished(courseId) {
 }
 
 function renderLessons(c) {
+  const enrolled = isEnrolled(c.id);
   const done = progress[c.id] || [];
+
+  // Not enrolled yet: show an Enroll button and a read-only lesson list
+  $("modalEnroll").innerHTML = enrolled
+    ? ""
+    : `<button class="btn" data-enroll="${c.id}">Enroll Free to Track Progress</button>`;
+
   $("lessonList").innerHTML = c.lessons
     .map(
       (lesson, i) => `
       <li class="${done.includes(i) ? "done" : ""}">
         <label>
-          <input type="checkbox" data-lesson="${i}" ${done.includes(i) ? "checked" : ""} />
+          <input type="checkbox" data-lesson="${i}" ${done.includes(i) ? "checked" : ""} ${enrolled ? "" : "disabled"} />
           <span>Lesson ${i + 1}: ${esc(lesson)}</span>
         </label>
       </li>`
     )
     .join("");
   $("modalProgress").style.width = percent(c) + "%";
-  $("modalProgressText").textContent = `${done.length}/${c.lessons.length} done · ${percent(c)}%`;
+  $("modalProgressText").textContent = enrolled
+    ? `${done.length}/${c.lessons.length} done · ${percent(c)}%`
+    : "Enroll to track your progress";
 }
 
 async function toggleLesson(index, checkbox) {

@@ -658,6 +658,14 @@ body {
   font-size: 0.85rem;
 }
 
+.modal-enroll {
+  margin-top: 14px;
+}
+
+.modal-enroll:empty {
+  display: none;
+}
+
 .video-note {
   font-size: 0.85rem;
   margin-top: -6px;
