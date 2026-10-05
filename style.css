@@ -709,25 +709,14 @@ body {
 }
 
 #lessonList li {
-  border-bottom: 1px solid var(--border);
-}
-
-#lessonList label {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 6px;
-  cursor: pointer;
+  border-bottom: 1px solid var(--border);
 }
 
-#lessonList input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--green);
-}
-
-#lessonList .done span {
-  text-decoration: line-through;
+#lessonList .done {
   color: var(--muted);
 }
 

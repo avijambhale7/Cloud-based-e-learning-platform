@@ -401,9 +401,14 @@ function renderDetails(c) {
 }
 
 // ---------- Video player ----------
-// Uses the YouTube IFrame API so we know when a video has been watched to the end.
+// Uses the YouTube IFrame API to track which seconds of the video were really watched.
+// The video is split into equal parts, one per lesson. A lesson completes automatically
+// once 90% of its part has been watched; skipping ahead doesn't count.
 let player = null;
 let youtubeApi = null;
+let watch = null; // { courseId, seen: Set of watched seconds, timer, saving }
+
+const WATCH_REQUIRED = 0.9; // share of each lesson's part that must be watched
 
 function loadYouTubeApi() {
   youtubeApi ??= new Promise((resolve, reject) => {
@@ -429,23 +434,30 @@ async function playVideo(c) {
   try {
     await loadYouTubeApi();
   } catch {
-    // YouTube API blocked: show a plain video (no auto-complete)
+    // YouTube API blocked: show a plain video (progress can't be tracked)
     $("videoBox").innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>`;
     return;
   }
   if (openCourseId !== c.id) return; // course was closed while loading
+
+  watch = { courseId: c.id, seen: new Set(), saving: false };
+  // Check twice a second, so even 2x playback speed doesn't miss any seconds
+  watch.timer = setInterval(() => recordWatching(c), 500);
+
   player = new YT.Player("ytPlayer", {
     videoId,
     playerVars: { rel: 0 },
     events: {
       onStateChange: e => {
-        if (e.data === YT.PlayerState.ENDED) videoFinished(c.id);
+        if (e.data === YT.PlayerState.ENDED) videoEnded(c);
       },
     },
   });
 }
 
 function stopVideo() {
+  if (watch) clearInterval(watch.timer);
+  watch = null;
   try {
     player?.destroy();
   } catch {}
@@ -453,39 +465,81 @@ function stopVideo() {
   $("videoBox").innerHTML = "";
 }
 
-// Watching the whole video completes the course
-async function videoFinished(courseId) {
-  const c = courses.find(x => x.id === courseId);
-  if (!c || !user || !isEnrolled(c.id) || percent(c) === 100) return;
-  const allLessons = c.lessons.map((_, i) => i);
+function recordWatching(c) {
+  if (!watch || !player?.getPlayerState) return;
+  if (player.getPlayerState() !== YT.PlayerState.PLAYING) return;
+  watch.seen.add(Math.floor(player.getCurrentTime()));
+  updateLessonsFromWatching(c);
+}
+
+// Which lessons have now been watched enough (that weren't already complete)
+function newlyWatchedLessons(c) {
+  const duration = Math.floor(player?.getDuration?.() || 0);
+  if (!duration || !watch) return [];
+  const done = progress[c.id] || [];
+  const part = duration / c.lessons.length;
+  const result = [];
+  c.lessons.forEach((_, i) => {
+    if (done.includes(i)) return;
+    const from = Math.floor(i * part);
+    const to = Math.floor((i + 1) * part);
+    let watched = 0;
+    for (let t = from; t < to; t++) if (watch.seen.has(t)) watched++;
+    if (watched >= WATCH_REQUIRED * (to - from)) result.push(i);
+  });
+  return result;
+}
+
+async function updateLessonsFromWatching(c) {
+  if (!user || !isEnrolled(c.id) || watch.saving) return;
+  const newly = newlyWatchedLessons(c);
+  if (!newly.length) return;
+
+  const lessons = [...new Set([...(progress[c.id] || []), ...newly])].sort((a, b) => a - b);
+  watch.saving = true;
   try {
-    await api.saveLessons(c.id, allLessons);
-    progress[c.id] = allLessons;
+    await api.saveLessons(c.id, lessons);
+    progress[c.id] = lessons;
     if (openCourseId === c.id) renderLessons(c);
     refresh();
-    toast(`🎓 Video finished! "${c.title}" is now complete.`, "success");
+    if (percent(c) === 100) {
+      toast(`🎓 Congratulations! You completed "${c.title}".`, "success");
+    } else {
+      toast(`✅ Lesson ${newly.map(i => i + 1).join(", ")} complete!`, "success");
+    }
   } catch (err) {
-    toast("Could not save: " + err.message, "error");
+    toast("Could not save your progress: " + err.message, "error");
+  } finally {
+    if (watch) watch.saving = false;
   }
+}
+
+function videoEnded(c) {
+  if (!user || !isEnrolled(c.id)) return;
+  // Give the last save a moment, then explain if parts were skipped
+  setTimeout(() => {
+    if (percent(c) < 100) {
+      toast("Some parts were skipped. Watch the full video to complete every lesson.", "error");
+    }
+  }, 1500);
 }
 
 function renderLessons(c) {
   const enrolled = isEnrolled(c.id);
   const done = progress[c.id] || [];
 
-  // Not enrolled yet: show an Enroll button and a read-only lesson list
+  // Not enrolled yet: show an Enroll button
   $("modalEnroll").innerHTML = enrolled
     ? ""
     : `<button class="btn" data-enroll="${c.id}">Enroll Free to Track Progress</button>`;
 
+  // Lessons can't be ticked by hand; they complete by watching the video
   $("lessonList").innerHTML = c.lessons
     .map(
       (lesson, i) => `
       <li class="${done.includes(i) ? "done" : ""}">
-        <label>
-          <input type="checkbox" data-lesson="${i}" ${done.includes(i) ? "checked" : ""} ${enrolled ? "" : "disabled"} />
-          <span>Lesson ${i + 1}: ${esc(lesson)}</span>
-        </label>
+        <span class="lesson-status">${done.includes(i) ? "✅" : "⬜"}</span>
+        <span>Lesson ${i + 1}: ${esc(lesson)}</span>
       </li>`
     )
     .join("");
@@ -493,26 +547,6 @@ function renderLessons(c) {
   $("modalProgressText").textContent = enrolled
     ? `${done.length}/${c.lessons.length} done · ${percent(c)}%`
     : "Enroll to track your progress";
-}
-
-async function toggleLesson(index, checkbox) {
-  const c = courses.find(x => x.id === openCourseId);
-  const before = progress[c.id] || [];
-  const after = checkbox.checked ? [...new Set([...before, index])] : before.filter(i => i !== index);
-
-  checkbox.disabled = true;
-  try {
-    await api.saveLessons(c.id, after);
-    progress[c.id] = after;
-    renderLessons(c);
-    refresh();
-    if (percent(c) === 100) toast(`🎓 Congratulations! You completed "${c.title}".`, "success");
-  } catch (err) {
-    checkbox.checked = !checkbox.checked;
-    toast("Could not save: " + err.message, "error");
-  } finally {
-    checkbox.disabled = false;
-  }
 }
 
 // ---------- Auth modal ----------
@@ -603,10 +637,6 @@ document.addEventListener("click", e => {
   } else if (t.dataset.tab) setAuthMode(t.dataset.tab);
   else if (t.dataset.close) hideModal(t.dataset.close);
   else if (t.classList.contains("modal")) hideModal(t.id);
-});
-
-$("lessonList").addEventListener("change", e => {
-  if (e.target.dataset.lesson) toggleLesson(Number(e.target.dataset.lesson), e.target);
 });
 
 document.addEventListener("keydown", e => {
