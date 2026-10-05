@@ -169,7 +169,15 @@
         </div>
         <form id="authForm">
           <input type="text" id="authName" placeholder="Full name" hidden />
-          <input type="email" id="authEmail" placeholder="Email" required />
+          <input
+            type="text"
+            id="authUsername"
+            placeholder="Username"
+            autocomplete="username"
+            autocapitalize="none"
+            spellcheck="false"
+            required
+          />
           <input
             type="password"
             id="authPassword"
@@ -185,8 +193,10 @@
             hidden
           />
           <p id="authHint" class="auth-hint" hidden>
-            🔑 Create a <strong>new password</strong> just for CloudLearn (min 6
-            characters). Don't use your email account's password.
+            👤 Username: 3–20 letters, numbers or _ (for example
+            <strong>avi_j</strong>).<br />
+            🔑 Password: at least 6 characters. Remember it; you'll need it to
+            login.
           </p>
           <button type="submit" id="authSubmit" class="btn btn-block">Login</button>
         </form>

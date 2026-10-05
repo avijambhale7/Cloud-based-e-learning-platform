@@ -7,7 +7,7 @@ To build a free e-learning website that runs entirely on the cloud: the frontend
 
 ## Features
 - Course catalog with search and category filter
-- Student sign up and login (Supabase Auth)
+- Student sign up and login with **username + password** (Supabase Auth)
 - Enroll in courses and watch video lessons
 - Tick off lessons; progress is saved in the cloud database and syncs across devices
 - Dashboard showing enrolled courses, completed courses and average progress
@@ -19,7 +19,7 @@ To build a free e-learning website that runs entirely on the cloud: the frontend
 |------|-----------|
 | Frontend | HTML, CSS, JavaScript |
 | Backend (BaaS) | Supabase |
-| Authentication | Supabase Auth (email + password) |
+| Authentication | Supabase Auth (username + password) |
 | Database | Supabase PostgreSQL with Row Level Security |
 | Videos | YouTube embeds |
 | Hosting | GitHub Pages / Netlify (free) |
@@ -60,7 +60,8 @@ supabase/schema.sql   → database tables, security rules and sample courses
      SUPABASE_ANON_KEY: "eyJhbGciOi...",
    };
    ```
-5. *(Optional, for testing)* Go to **Authentication → Sign In / Providers → Email** and turn off **Confirm email**, so new accounts can log in right away without clicking an email link.
+5. **Required:** go to **Authentication → Sign In / Providers** and turn off **Confirm email**, then click **Save changes**.
+   Students log in with a username; behind the scenes it's stored as `username@cloudlearn.app`, and no email is ever sent.
 6. Open the site. The yellow "Demo mode" banner disappears, and sign ups now appear under **Authentication → Users** in Supabase.
 
 > The anon key is meant to be public. Your data is protected by the RLS policies, not by hiding the key.

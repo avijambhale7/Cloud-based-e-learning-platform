@@ -12,7 +12,7 @@ const sb = useSupabase ? window.supabase.createClient(supabaseUrl, cfg.SUPABASE_
 
 // ---------- State ----------
 let courses = [];
-let user = null; // { id, name, email }
+let user = null; // { id, name, username }
 let progress = {}; // { courseId: [completed lesson indexes] }
 let category = "All";
 let authMode = "login";
@@ -56,6 +56,14 @@ const DEMO_COURSES = [
     lessons: ["What is a Database?", "SELECT Queries", "INSERT, UPDATE, DELETE", "Joins", "Cloud Databases (Supabase / Postgres)"] },
 ];
 
+// ---------- Usernames ----------
+// Supabase Auth needs an email-style login, so each username is turned into
+// a hidden internal address. No email is ever sent to it
+// ("Confirm email" must be OFF in Supabase).
+const USERNAME_DOMAIN = "cloudlearn.app";
+const usernameToEmail = username => `${username}@${USERNAME_DOMAIN}`;
+const isValidUsername = username => /^[a-z0-9_]{3,20}$/.test(username);
+
 // ---------- Backend API ----------
 // Both versions have the same functions, so the rest of the app
 // doesn't care where the data lives.
@@ -81,12 +89,18 @@ const supabaseApi = {
   async saveLessons(courseId, lessons) {
     check(await sb.from("enrollments").update({ completed_lessons: lessons }).eq("course_id", courseId));
   },
-  async signUp(name, email, password) {
-    const data = check(await sb.auth.signUp({ email, password, options: { data: { full_name: name } } }));
-    return Boolean(data.session); // false = email confirmation required
+  async signUp(name, username, password) {
+    const data = check(
+      await sb.auth.signUp({
+        email: usernameToEmail(username),
+        password,
+        options: { data: { full_name: name, username } },
+      })
+    );
+    return Boolean(data.session); // false = "Confirm email" is still ON in Supabase
   },
-  async signIn(email, password) {
-    check(await sb.auth.signInWithPassword({ email, password }));
+  async signIn(username, password) {
+    check(await sb.auth.signInWithPassword({ email: usernameToEmail(username), password }));
   },
   async signOut() {
     await sb.auth.signOut();
@@ -98,32 +112,32 @@ const demoApi = {
     return DEMO_COURSES;
   },
   async getProgress() {
-    return store.get("cl_progress_" + user.email, {});
+    return store.get("cl_progress_" + user.id, {});
   },
   async enroll(courseId) {
     progress[courseId] = [];
-    store.set("cl_progress_" + user.email, progress);
+    store.set("cl_progress_" + user.id, progress);
   },
   async unenroll(courseId) {
     delete progress[courseId];
-    store.set("cl_progress_" + user.email, progress);
+    store.set("cl_progress_" + user.id, progress);
   },
   async saveLessons(courseId, lessons) {
     progress[courseId] = lessons;
-    store.set("cl_progress_" + user.email, progress);
+    store.set("cl_progress_" + user.id, progress);
   },
-  async signUp(name, email, password) {
+  async signUp(name, username, password) {
     const users = store.get("cl_users", {});
-    if (users[email]) throw new Error("An account with this email already exists.");
-    users[email] = { name, password }; // demo only: never store passwords like this in a real app
+    if (users[username]) throw new Error("User already registered");
+    users[username] = { name, password }; // demo only: never store passwords like this in a real app
     store.set("cl_users", users);
-    await setUser({ id: email, name, email });
+    await setUser({ id: username, name, username });
     return true;
   },
-  async signIn(email, password) {
-    const account = store.get("cl_users", {})[email];
-    if (!account || account.password !== password) throw new Error("Invalid email or password.");
-    await setUser({ id: email, name: account.name, email });
+  async signIn(username, password) {
+    const account = store.get("cl_users", {})[username];
+    if (!account || account.password !== password) throw new Error("Invalid login credentials");
+    await setUser({ id: username, name: account.name, username });
   },
   async signOut() {
     await setUser(null);
@@ -155,10 +169,14 @@ async function busy(button, task) {
     await task();
   } catch (err) {
     let message = err.message || "Something went wrong.";
-    if (/rate limit/i.test(message)) {
+    if (/invalid login credentials/i.test(message)) {
+      message = "Wrong username or password.";
+    } else if (/already registered|already exists/i.test(message)) {
+      message = "This username is already taken. Please choose another one.";
+    } else if (/rate limit/i.test(message)) {
       message = "Too many sign ups right now. Please wait a few minutes and try again.";
     } else if (/email not confirmed/i.test(message)) {
-      message = "Please confirm your email first (check your inbox), then login.";
+      message = "This account isn't activated yet. Ask the admin to turn off 'Confirm email' in Supabase.";
     }
     toast(message, "error");
   } finally {
@@ -357,7 +375,7 @@ async function toggleLesson(index, checkbox) {
 function openAuth(mode) {
   setAuthMode(mode);
   showModal("authModal");
-  $("authEmail").focus();
+  $(mode === "signup" ? "authName" : "authUsername").focus();
 }
 
 function setAuthMode(mode) {
@@ -365,6 +383,7 @@ function setAuthMode(mode) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === mode));
   const signup = mode === "signup";
   $("authName").hidden = !signup;
+  $("authUsername").placeholder = signup ? "Choose a username" : "Username";
   $("authName").required = signup;
   $("authConfirm").hidden = !signup;
   $("authConfirm").required = signup;
@@ -377,9 +396,13 @@ function setAuthMode(mode) {
 $("authForm").addEventListener("submit", e => {
   e.preventDefault();
   const name = $("authName").value.trim();
-  const email = $("authEmail").value.trim().toLowerCase();
+  const username = $("authUsername").value.trim().toLowerCase();
   const password = $("authPassword").value;
 
+  if (!isValidUsername(username)) {
+    toast("Username must be 3–20 characters: letters, numbers or _ only.", "error");
+    return;
+  }
   if (authMode === "signup" && password !== $("authConfirm").value) {
     toast("Passwords do not match. Please type the same new password twice.", "error");
     return;
@@ -387,15 +410,15 @@ $("authForm").addEventListener("submit", e => {
 
   busy($("authSubmit"), async () => {
     if (authMode === "signup") {
-      const loggedIn = await api.signUp(name, email, password);
+      const loggedIn = await api.signUp(name, username, password);
       if (!loggedIn) {
-        toast("Account created! Check your email to confirm, then login.", "success");
+        toast("Account created, but it can't be used until 'Confirm email' is turned off in Supabase.", "error");
         setAuthMode("login");
         return;
       }
       toast(`Welcome to CloudLearn, ${name}! 🎉`, "success");
     } else {
-      await api.signIn(email, password);
+      await api.signIn(username, password);
       toast("Logged in successfully.", "success");
     }
     $("authForm").reset();
@@ -468,6 +491,11 @@ $("themeBtn").addEventListener("click", () => {
 applyTheme(store.get("cl_theme", matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 
 // ---------- Start the app ----------
+function toUser(u) {
+  const username = u.user_metadata?.username || u.email.split("@")[0];
+  return { id: u.id, username, name: u.user_metadata?.full_name || username };
+}
+
 async function init() {
   $("courseList").innerHTML = '<div class="card skeleton"></div>'.repeat(3);
   $("demoBanner").hidden = useSupabase;
@@ -485,7 +513,7 @@ async function init() {
     sb.auth.onAuthStateChange((_event, session) => {
       const u = session?.user;
       setTimeout(() =>
-        setUser(u ? { id: u.id, email: u.email, name: u.user_metadata?.full_name || u.email.split("@")[0] } : null)
+        setUser(u ? toUser(u) : null)
       );
     });
   } else {
