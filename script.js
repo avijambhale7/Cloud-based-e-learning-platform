@@ -188,6 +188,22 @@ const demoApi = {
 
 const api = useSupabase ? supabaseApi : demoApi;
 
+// Fill in course details from the built-in list when the database doesn't have them
+// (for example if supabase/update_course_details.sql hasn't been run yet)
+function withDetails(course) {
+  const extra = DEMO_COURSES.find(d => d.title === course.title);
+  if (!extra) return course;
+  const oldDatabase = !course.instructor; // old rows also have the blocked HTML & CSS video
+  return {
+    ...course,
+    instructor: course.instructor || extra.instructor,
+    about: course.about || extra.about,
+    outcomes: course.outcomes?.length ? course.outcomes : extra.outcomes,
+    requirements: course.requirements || extra.requirements,
+    video_url: oldDatabase ? extra.video_url : course.video_url,
+  };
+}
+
 // ---------- Helpers ----------
 function toast(message, type = "") {
   const el = document.createElement("div");
@@ -682,7 +698,7 @@ async function init() {
   $("demoBanner").hidden = useSupabase;
 
   try {
-    courses = await api.getCourses();
+    courses = (await api.getCourses()).map(withDetails);
   } catch (err) {
     courses = [];
     loadError = err.message;
