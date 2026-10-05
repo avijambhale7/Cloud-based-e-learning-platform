@@ -129,6 +129,11 @@
           <div class="filters">
             <input type="search" id="searchBox" placeholder="🔍 Search courses..." />
             <div id="categoryChips" class="chips"></div>
+            <div class="chips">
+              <button class="chip level-chip active" data-level="All">All levels</button>
+              <button class="chip level-chip" data-level="Beginner">Beginner</button>
+              <button class="chip level-chip" data-level="Intermediate">Intermediate</button>
+            </div>
           </div>
           <p id="resultCount" class="result-count muted"></p>
           <div id="courseList" class="grid"></div>
@@ -168,6 +173,7 @@
               </div>
               <div id="courseAction" class="course-action"></div>
               <h3 class="lessons-title">Lessons</h3>
+              <p class="lessons-hint muted">Click a lesson to jump to it in the video.</p>
               <ul id="lessonList"></ul>
             </div>
           </aside>
@@ -328,6 +334,27 @@
           />
           <button type="submit" id="authSubmit" class="btn btn-block">Login</button>
         </form>
+      </div>
+    </div>
+
+    <!-- ================= Certificate Modal ================= -->
+    <div id="certModal" class="modal">
+      <div class="modal-box cert-box">
+        <button class="close" data-close="certModal" aria-label="Close">&times;</button>
+        <div id="certificate" class="certificate">
+          <div class="cert-logo">☁️ CloudLearn</div>
+          <p class="cert-label">Certificate of Completion</p>
+          <p class="cert-small">This is to certify that</p>
+          <h2 id="certName" class="cert-name"></h2>
+          <p class="cert-small">has successfully completed the course</p>
+          <h3 id="certCourse" class="cert-course"></h3>
+          <div class="cert-footer">
+            <div><strong id="certDate"></strong><span>Date</span></div>
+            <div class="cert-seal">🎓</div>
+            <div><strong id="certInstructor"></strong><span>Instructor</span></div>
+          </div>
+        </div>
+        <button id="printCert" class="btn btn-block">🖨️ Print / Save as PDF</button>
       </div>
     </div>
 

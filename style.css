@@ -208,6 +208,7 @@ a {
   cursor: pointer;
   text-decoration: none;
   text-align: center;
+  white-space: nowrap;
   font-family: inherit;
   font-size: 0.95rem;
   font-weight: 500;
@@ -992,10 +993,18 @@ a {
 #lessonList li {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 4px;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 10px 8px;
   border-bottom: 1px solid var(--border);
+  border-radius: 8px;
   font-size: 0.92rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#lessonList li:hover {
+  background: var(--bg-alt);
 }
 
 #lessonList li:last-child {
@@ -1004,6 +1013,140 @@ a {
 
 #lessonList .done {
   color: var(--muted);
+}
+
+.lesson-name {
+  flex: 1;
+}
+
+.now-playing {
+  display: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+#lessonList li.current {
+  background: var(--primary-soft);
+  color: var(--text);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+#lessonList li.current .now-playing {
+  display: inline;
+}
+
+[data-theme="dark"] .now-playing {
+  color: #a5b4fc;
+}
+
+.lessons-hint {
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+.complete-banner + .btn {
+  margin-top: 10px;
+}
+
+/* ---------- Certificate ---------- */
+.modal-box.cert-box {
+  max-width: 720px;
+}
+
+.certificate {
+  text-align: center;
+  padding: 36px 30px;
+  margin: 10px 0 18px;
+  border-radius: 12px;
+  background: #fffdf5;
+  color: #1f2937;
+  border: 10px double #c9a227;
+}
+
+.cert-logo {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #4f46e5;
+}
+
+.cert-label {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #1e1b4b;
+  margin: 10px 0 16px;
+  text-transform: uppercase;
+}
+
+.cert-small {
+  color: #6b7280;
+}
+
+.cert-name {
+  font-size: 2rem;
+  color: #4f46e5;
+  margin: 6px 0;
+  border-bottom: 2px solid #c9a227;
+  display: inline-block;
+  padding: 0 20px 4px;
+}
+
+.cert-course {
+  font-size: 1.3rem;
+  margin-top: 6px;
+}
+
+.cert-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 30px;
+  gap: 10px;
+}
+
+.cert-footer div:not(.cert-seal) {
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+}
+
+.cert-footer strong {
+  border-bottom: 1px solid #9ca3af;
+  padding-bottom: 4px;
+}
+
+.cert-footer span {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.cert-seal {
+  font-size: 3rem;
+}
+
+/* When printing, show only the certificate */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #certificate,
+  #certificate * {
+    visibility: visible;
+  }
+
+  #certificate {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 /* ---------- Progress bar ---------- */

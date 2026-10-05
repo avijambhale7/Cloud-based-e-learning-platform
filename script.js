@@ -15,6 +15,7 @@ let courses = [];
 let user = null; // { id, name, username }
 let progress = {}; // { courseId: [completed lesson indexes] }
 let category = "All";
+let level = "All";
 let authMode = "login";
 let loadError = ""; // shown in the course list if courses fail to load
 
@@ -263,9 +264,13 @@ function courseCard(c, inDashboard = false) {
   const enrolled = isEnrolled(c.id);
 
   let buttons;
-  if (inDashboard) {
+  if (inDashboard && p === 100) {
     buttons = `
-      <a class="btn" href="#/course/${c.id}">${p === 100 ? "Review" : "Continue →"}</a>
+      <button class="btn btn-green" data-cert="${c.id}">🎓 Certificate</button>
+      <a class="btn btn-ghost" href="#/course/${c.id}">Review</a>`;
+  } else if (inDashboard) {
+    buttons = `
+      <a class="btn" href="#/course/${c.id}">Continue →</a>
       <button class="btn btn-ghost" data-unenroll="${c.id}">Remove</button>`;
   } else if (enrolled) {
     buttons = `<a class="btn btn-green" href="#/course/${c.id}">${p === 100 ? "✓ Completed" : "Continue →"}</a>`;
@@ -344,6 +349,7 @@ function renderCourses() {
   const filtered = courses.filter(
     c =>
       (category === "All" || c.category === category) &&
+      (level === "All" || c.level === level) &&
       [c.title, c.description, c.instructor].some(text => (text || "").toLowerCase().includes(search))
   );
   $("resultCount").textContent = courses.length ? `Showing ${filtered.length} of ${courses.length} courses` : "";
@@ -428,16 +434,18 @@ function renderLessons(c) {
   $("courseAction").innerHTML = !enrolled
     ? `<button class="btn btn-block" data-enroll="${c.id}">Enroll Free to Track Progress</button>`
     : percent(c) === 100
-      ? '<div class="complete-banner">🎓 Course completed!</div>'
+      ? `<div class="complete-banner">🎓 Course completed!</div>
+         <button class="btn btn-green btn-block" data-cert="${c.id}">View Certificate</button>`
       : "";
 
   // Lessons can't be ticked by hand; they complete by watching the video
   $("lessonList").innerHTML = c.lessons
     .map(
       (lesson, i) => `
-      <li class="${done.includes(i) ? "done" : ""}">
+      <li class="${done.includes(i) ? "done" : ""} ${i === currentLesson ? "current" : ""}" data-seek="${i}">
         <span class="lesson-status">${done.includes(i) ? "✅" : "⬜"}</span>
-        <span>Lesson ${i + 1}: ${esc(lesson)}</span>
+        <span class="lesson-name">Lesson ${i + 1}: ${esc(lesson)}</span>
+        <span class="now-playing">▶ Now playing</span>
       </li>`
     )
     .join("");
@@ -583,10 +591,15 @@ async function playVideo(c) {
   // Check twice a second, so even 2x playback speed doesn't miss any seconds
   watch.timer = setInterval(() => recordWatching(c), 500);
 
+  // Resume where the student left off last time
+  const resumeAt = store.get(positionKey(c.id), 0);
   player = new YT.Player("ytPlayer", {
     videoId,
-    playerVars: { rel: 0 },
+    playerVars: { rel: 0, start: resumeAt },
     events: {
+      onReady: () => {
+        if (resumeAt > 0) toast(`▶ Resuming where you left off (${formatTime(resumeAt)}).`);
+      },
       onStateChange: e => {
         if (e.data === YT.PlayerState.ENDED) videoEnded(c);
       },
@@ -595,6 +608,8 @@ async function playVideo(c) {
 }
 
 function stopVideo() {
+  savePosition();
+  currentLesson = -1;
   if (watch) clearInterval(watch.timer);
   watch = null;
   try {
@@ -608,7 +623,66 @@ function recordWatching(c) {
   if (!watch || !player?.getPlayerState) return;
   if (player.getPlayerState() !== YT.PlayerState.PLAYING) return;
   watch.seen.add(Math.floor(player.getCurrentTime()));
+  highlightCurrentLesson(c);
+  if (watch.seen.size % 10 === 0) savePosition(); // every few seconds
   updateLessonsFromWatching(c);
+}
+
+// ---------- Resume, "Now playing" and jumping to a lesson ----------
+let currentLesson = -1;
+
+const positionKey = courseId => `cl_pos_${user?.id || "guest"}_${courseId}`;
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function savePosition() {
+  if (!player?.getCurrentTime || !watch) return;
+  const time = Math.floor(player.getCurrentTime());
+  const duration = Math.floor(player.getDuration() || 0);
+  // Near the end? Start from the beginning next time
+  store.set(positionKey(watch.courseId), duration && time > duration - 15 ? 0 : time);
+}
+
+function lessonAt(c, time) {
+  const duration = player?.getDuration?.() || 0;
+  if (!duration) return -1;
+  return Math.min(c.lessons.length - 1, Math.floor(time / (duration / c.lessons.length)));
+}
+
+function highlightCurrentLesson(c) {
+  const index = lessonAt(c, player.getCurrentTime());
+  if (index === currentLesson) return;
+  currentLesson = index;
+  document.querySelectorAll("#lessonList li").forEach((li, i) => li.classList.toggle("current", i === index));
+}
+
+function jumpToLesson(index) {
+  const c = courses.find(x => x.id === openCourseId);
+  const duration = player?.getDuration?.() || 0;
+  if (!c || !duration) {
+    toast("The video is still loading. Try again in a moment.");
+    return;
+  }
+  player.seekTo((index * duration) / c.lessons.length, true);
+  player.playVideo();
+  currentLesson = -1;
+  highlightCurrentLesson(c);
+  $("videoBox").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+// ---------- Certificate ----------
+function openCertificate(courseId) {
+  const c = courses.find(x => x.id === courseId);
+  if (!c || !user || percent(c) < 100) return;
+  $("certName").textContent = user.name;
+  $("certCourse").textContent = c.title;
+  $("certDate").textContent = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+  $("certInstructor").textContent = c.instructor || "CloudLearn";
+  showModal("certModal");
 }
 
 // Which lessons have now been watched enough (that weren't already complete)
@@ -736,7 +810,9 @@ function hideModal(id) {
 // ---------- Event listeners ----------
 document.addEventListener("click", e => {
   if (e.target.classList.contains("modal")) return hideModal(e.target.id); // click outside the box
-  const t = e.target.closest("[data-enroll], [data-unenroll], [data-auth], [data-cat], [data-tab], [data-close]");
+  const t = e.target.closest(
+    "[data-enroll], [data-unenroll], [data-auth], [data-cat], [data-level], [data-tab], [data-close], [data-seek], [data-cert]"
+  );
   if (!t) return;
   if (t.dataset.enroll) enroll(Number(t.dataset.enroll), t);
   else if (t.dataset.unenroll) unenroll(Number(t.dataset.unenroll), t);
@@ -744,7 +820,13 @@ document.addEventListener("click", e => {
   else if (t.dataset.cat) {
     // Keep the link in sync so the filter survives a refresh
     location.hash = t.dataset.cat === "All" ? "#/courses" : `#/courses/${encodeURIComponent(t.dataset.cat)}`;
-  } else if (t.dataset.tab) setAuthMode(t.dataset.tab);
+  } else if (t.dataset.level) {
+    level = t.dataset.level;
+    document.querySelectorAll(".level-chip").forEach(b => b.classList.toggle("active", b === t));
+    renderCourses();
+  } else if (t.dataset.seek) jumpToLesson(Number(t.dataset.seek));
+  else if (t.dataset.cert) openCertificate(Number(t.dataset.cert));
+  else if (t.dataset.tab) setAuthMode(t.dataset.tab);
   else if (t.dataset.close) hideModal(t.dataset.close);
 });
 
@@ -753,6 +835,11 @@ document.addEventListener("keydown", e => {
 });
 
 $("searchBox").addEventListener("input", renderCourses);
+
+$("printCert").addEventListener("click", () => window.print());
+
+// Remember the video position if the tab is closed or refreshed
+window.addEventListener("beforeunload", savePosition);
 
 $("logoutBtn").addEventListener("click", async () => {
   await api.signOut();
