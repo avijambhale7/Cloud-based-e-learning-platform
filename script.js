@@ -242,106 +242,266 @@ async function busy(button, task) {
   }
 }
 
-// ---------- Rendering ----------
-function renderCategories() {
-  const cats = ["All", ...new Set(courses.map(c => c.category))];
-  $("categoryChips").innerHTML = cats
-    .map(c => `<button class="chip ${c === category ? "active" : ""}" data-cat="${esc(c)}">${esc(c)}</button>`)
-    .join("");
+// ---------- Small render helpers ----------
+const CATEGORY_INFO = {
+  Cloud: { icon: "☁️", text: "AWS, cloud basics and deployment" },
+  Programming: { icon: "🐍", text: "Learn to code with Python" },
+  Web: { icon: "🌐", text: "HTML, CSS and JavaScript" },
+  Database: { icon: "🗄️", text: "SQL and cloud databases" },
+};
+
+const categoryClass = c => (CATEGORY_INFO[c] ? c : "default");
+const categories = () => [...new Set(courses.map(c => c.category))];
+const lessonsDone = c => (progress[c.id] || []).length;
+
+function setGrid(id, items, emptyHtml) {
+  $(id).innerHTML = items.length ? items.join("") : emptyHtml;
 }
 
 function courseCard(c, inDashboard = false) {
   const p = percent(c);
   const enrolled = isEnrolled(c.id);
-  const thumbClass = ["Cloud", "Programming", "Web", "Database"].includes(c.category) ? c.category : "default";
 
   let buttons;
   if (inDashboard) {
     buttons = `
-      <button class="btn" data-open="${c.id}">${p === 100 ? "Review" : "Continue"}</button>
+      <a class="btn" href="#/course/${c.id}">${p === 100 ? "Review" : "Continue →"}</a>
       <button class="btn btn-ghost" data-unenroll="${c.id}">Remove</button>`;
   } else if (enrolled) {
-    buttons = `<button class="btn btn-green" data-open="${c.id}">${p === 100 ? "✓ Completed" : "Continue →"}</button>`;
+    buttons = `<a class="btn btn-green" href="#/course/${c.id}">${p === 100 ? "✓ Completed" : "Continue →"}</a>`;
   } else {
     buttons = `
       <button class="btn" data-enroll="${c.id}">Enroll Free</button>
-      <button class="btn btn-ghost" data-open="${c.id}">Details</button>`;
+      <a class="btn btn-ghost" href="#/course/${c.id}">Details</a>`;
   }
 
   return `
-    <div class="card">
-      <div class="card-thumb thumb-${thumbClass}">
+    <div class="card course-card">
+      <a href="#/course/${c.id}" class="card-thumb thumb-${categoryClass(c.category)}">
         ${esc(c.icon)}
         ${p === 100 ? '<span class="done-badge">🎓 Completed</span>' : ""}
-      </div>
+      </a>
       <div class="card-body">
         <div class="tags">
           <span class="tag">${esc(c.category)}</span>
           <span class="tag level">${esc(c.level)}</span>
         </div>
-        <h3>${esc(c.title)}</h3>
+        <h3><a href="#/course/${c.id}">${esc(c.title)}</a></h3>
         <p>${esc(c.description)}</p>
+        ${c.instructor ? `<p class="instructor">🎓 ${esc(c.instructor)}</p>` : ""}
         ${enrolled
           ? `<div class="progress"><div class="progress-bar" style="width:${p}%"></div></div>
-             <p class="meta">${p}% complete · ${(progress[c.id] || []).length}/${c.lessons.length} lessons</p>`
+             <p class="meta">${p}% complete · ${lessonsDone(c)}/${c.lessons.length} lessons</p>`
           : `<p class="meta">⏱ ${esc(c.duration)} · 📚 ${c.lessons.length} lessons</p>`}
         <div class="actions">${buttons}</div>
       </div>
     </div>`;
 }
 
+function loadErrorHtml() {
+  return loadError
+    ? `<p class="empty">⚠️ Could not load courses from Supabase:<br><code>${esc(loadError)}</code></p>`
+    : '<p class="empty">No courses yet.</p>';
+}
+
+// ---------- Page: Home ----------
+function renderHome() {
+  $("statCourses").textContent = courses.length;
+  $("statLessons").textContent = courses.reduce((sum, c) => sum + c.lessons.length, 0);
+
+  $("categoryTiles").innerHTML = categories()
+    .map(cat => {
+      const info = CATEGORY_INFO[cat] || { icon: "📘", text: "" };
+      const count = courses.filter(c => c.category === cat).length;
+      return `
+        <a href="#/courses/${encodeURIComponent(cat)}" class="category-tile thumb-${categoryClass(cat)}">
+          <span class="tile-icon">${info.icon}</span>
+          <strong>${esc(cat)}</strong>
+          <span>${esc(info.text)}</span>
+          <small>${count} course${count === 1 ? "" : "s"} →</small>
+        </a>`;
+    })
+    .join("");
+
+  setGrid("popularCourses", courses.slice(0, 3).map(c => courseCard(c)), loadErrorHtml());
+
+  $("footerCategories").innerHTML = categories()
+    .map(cat => `<a href="#/courses/${encodeURIComponent(cat)}">${esc(cat)}</a>`)
+    .join("");
+}
+
+// ---------- Page: Courses ----------
+function renderCategories() {
+  $("categoryChips").innerHTML = ["All", ...categories()]
+    .map(c => `<button class="chip ${c === category ? "active" : ""}" data-cat="${esc(c)}">${esc(c)}</button>`)
+    .join("");
+}
+
 function renderCourses() {
+  renderCategories();
+  if (loadError) {
+    $("resultCount").textContent = "";
+    $("courseList").innerHTML = loadErrorHtml();
+    return;
+  }
   const search = $("searchBox").value.trim().toLowerCase();
   const filtered = courses.filter(
     c =>
       (category === "All" || c.category === category) &&
-      (c.title.toLowerCase().includes(search) || (c.description || "").toLowerCase().includes(search))
+      [c.title, c.description, c.instructor].some(text => (text || "").toLowerCase().includes(search))
   );
-  if (loadError) {
-    $("courseList").innerHTML = `<p class="empty">⚠️ Could not load courses from Supabase:<br><code>${esc(loadError)}</code></p>`;
-    return;
-  }
-  $("courseList").innerHTML = filtered.length
-    ? filtered.map(c => courseCard(c)).join("")
-    : '<p class="empty">No courses found. Try another search.</p>';
+  $("resultCount").textContent = courses.length ? `Showing ${filtered.length} of ${courses.length} courses` : "";
+  setGrid("courseList", filtered.map(c => courseCard(c)), '<p class="empty">No courses found. Try another search.</p>');
 }
 
-function renderDashboard() {
-  const enrolled = courses.filter(c => isEnrolled(c.id));
-  const completed = enrolled.filter(c => percent(c) === 100).length;
-  const avg = enrolled.length ? Math.round(enrolled.reduce((sum, c) => sum + percent(c), 0) / enrolled.length) : 0;
-
+// ---------- Page: My Learning ----------
+function renderLearning() {
+  $("loginPrompt").hidden = Boolean(user);
+  $("learningContent").hidden = !user;
   $("welcomeText").textContent = user
     ? `Welcome back, ${user.name}! Here is your progress.`
-    : "Please login to track your courses.";
+    : "Track your courses and progress.";
+  if (!user) return;
+
+  const enrolled = courses.filter(c => isEnrolled(c.id));
+  const inProgress = enrolled.filter(c => percent(c) < 100);
+  const completed = enrolled.filter(c => percent(c) === 100);
+  const avg = enrolled.length ? Math.round(enrolled.reduce((sum, c) => sum + percent(c), 0) / enrolled.length) : 0;
+
   $("enrolledCount").textContent = enrolled.length;
-  $("completedCount").textContent = completed;
+  $("completedCount").textContent = completed.length;
+  $("lessonsDoneCount").textContent = enrolled.reduce((sum, c) => sum + lessonsDone(c), 0);
   $("avgProgress").textContent = avg + "%";
 
-  if (!user) {
-    $("myCourses").innerHTML = "";
-  } else if (!enrolled.length) {
-    $("myCourses").innerHTML = '<p class="empty">You have not enrolled in any course yet. <a href="#courses">Browse courses →</a></p>';
-  } else {
-    $("myCourses").innerHTML = enrolled.map(c => courseCard(c, true)).join("");
-  }
+  setGrid(
+    "inProgressCourses",
+    inProgress.map(c => courseCard(c, true)),
+    `<p class="empty">${enrolled.length ? "Nothing in progress right now. 🎉" : "You haven't enrolled in any course yet."}
+       <a href="#/courses">Browse courses →</a></p>`
+  );
+  setGrid(
+    "completedCourses",
+    completed.map(c => courseCard(c, true)),
+    '<p class="empty">Finish watching a course to see it here.</p>'
+  );
 }
 
+// ---------- Page: Course detail ----------
+let openCourseId = null;
+
+function showCourse(id) {
+  const c = courses.find(x => x.id === id);
+  if (!c) {
+    toast("Course not found.", "error");
+    location.hash = "#/courses";
+    return;
+  }
+  if (openCourseId === id) return; // already showing it; keep the video playing
+  stopVideo();
+  openCourseId = id;
+  document.title = `${c.title} - CloudLearn`;
+
+  $("courseHero").className = `course-hero thumb-${categoryClass(c.category)}`;
+  $("courseTitle").textContent = `${c.icon} ${c.title}`;
+  $("courseDesc").textContent = c.description;
+  $("courseMeta").innerHTML = [
+    c.category && "📂 " + c.category,
+    c.level && "📊 " + c.level,
+    c.duration && "⏱ " + c.duration,
+    `📚 ${c.lessons.length} lessons`,
+    c.instructor && "🎓 " + c.instructor,
+  ]
+    .filter(Boolean)
+    .map(m => `<span>${esc(m)}</span>`)
+    .join("");
+
+  $("courseAbout").innerHTML = c.about ? `<h3>About this course</h3><p>${esc(c.about)}</p>` : "";
+  $("courseOutcomes").innerHTML = c.outcomes?.length
+    ? `<h3>What you'll learn</h3><ul class="outcomes">${c.outcomes.map(o => `<li>${esc(o)}</li>`).join("")}</ul>`
+    : "";
+  $("courseRequirements").innerHTML = c.requirements ? `<h3>Requirements</h3><p>${esc(c.requirements)}</p>` : "";
+
+  renderLessons(c);
+  playVideo(c);
+}
+
+function renderLessons(c) {
+  const enrolled = isEnrolled(c.id);
+  const done = progress[c.id] || [];
+
+  $("courseAction").innerHTML = !enrolled
+    ? `<button class="btn btn-block" data-enroll="${c.id}">Enroll Free to Track Progress</button>`
+    : percent(c) === 100
+      ? '<div class="complete-banner">🎓 Course completed!</div>'
+      : "";
+
+  // Lessons can't be ticked by hand; they complete by watching the video
+  $("lessonList").innerHTML = c.lessons
+    .map(
+      (lesson, i) => `
+      <li class="${done.includes(i) ? "done" : ""}">
+        <span class="lesson-status">${done.includes(i) ? "✅" : "⬜"}</span>
+        <span>Lesson ${i + 1}: ${esc(lesson)}</span>
+      </li>`
+    )
+    .join("");
+  $("courseProgress").style.width = percent(c) + "%";
+  $("courseProgressText").textContent = enrolled
+    ? `${done.length}/${c.lessons.length} done · ${percent(c)}%`
+    : "Not enrolled";
+}
+
+// ---------- Header ----------
 function renderHeader() {
-  $("loginBtn").textContent = user ? "Logout" : "Login";
-  $("userChip").hidden = !user;
-  $("userChip").textContent = user ? "👤 " + user.name : "";
-  $("heroSignup").hidden = Boolean(user);
-  $("statCourses").textContent = courses.length;
-  $("statLessons").textContent = courses.reduce((sum, c) => sum + c.lessons.length, 0);
+  $("guestActions").hidden = Boolean(user);
+  $("userActions").hidden = !user;
+  if (user) {
+    $("userAvatar").textContent = user.name.charAt(0).toUpperCase();
+    $("userName").textContent = user.name;
+  }
+  document.querySelectorAll("[data-guest-only]").forEach(el => (el.hidden = Boolean(user)));
+  document.querySelectorAll("[data-user-only]").forEach(el => (el.hidden = !user));
 }
 
 function refresh() {
   renderHeader();
-  renderCategories();
+  renderHome();
   renderCourses();
-  renderDashboard();
+  renderLearning();
+  const c = courses.find(x => x.id === openCourseId);
+  if (c) renderLessons(c);
 }
+
+// ---------- Router: each page has its own link, e.g. #/courses or #/course/3 ----------
+const PAGES = ["home", "courses", "course", "learning", "about"];
+const PAGE_TITLES = { home: "Home", courses: "Courses", learning: "My Learning", about: "About" };
+
+function route() {
+  const [name, arg] = location.hash.replace(/^#\/?/, "").split("/");
+  const page = PAGES.includes(name) ? name : "home";
+
+  document.querySelectorAll(".page").forEach(el => el.classList.toggle("active", el.dataset.page === page));
+  document.querySelectorAll("[data-nav]").forEach(a => {
+    a.classList.toggle("active", a.dataset.nav === page || (page === "course" && a.dataset.nav === "courses"));
+  });
+  $("navLinks").classList.remove("open");
+
+  if (page === "courses") {
+    category = arg ? decodeURIComponent(arg) : "All";
+    renderCourses();
+  }
+
+  if (page === "course") {
+    showCourse(Number(arg));
+  } else {
+    stopVideo();
+    openCourseId = null;
+    document.title = `${PAGE_TITLES[page]} - CloudLearn`;
+  }
+  window.scrollTo(0, 0);
+}
+
+window.addEventListener("hashchange", route);
 
 // ---------- User session ----------
 async function setUser(u) {
@@ -360,7 +520,6 @@ async function setUser(u) {
 async function enroll(id, button) {
   if (!user) {
     toast("Please login or sign up to enroll.");
-    hideModal("courseModal"); // so the login box isn't hidden behind it
     openAuth("signup");
     return;
   }
@@ -369,9 +528,8 @@ async function enroll(id, button) {
     progress[id] = [];
     refresh();
     toast("Enrolled! Happy learning 🎉", "success");
-    // Already looking at this course's details? Just unlock the lessons (keeps the video playing)
-    if (openCourseId === id) renderLessons(courses.find(x => x.id === id));
-    else openCourse(id);
+    // Go to the course page (if already there, the video keeps playing)
+    location.hash = `#/course/${id}`;
   });
 }
 
@@ -383,37 +541,6 @@ async function unenroll(id, button) {
     refresh();
     toast("Course removed.");
   });
-}
-
-let openCourseId = null;
-
-function openCourse(id) {
-  const c = courses.find(x => x.id === id);
-  stopVideo();
-  openCourseId = id;
-  $("modalTitle").textContent = c.icon + " " + c.title;
-  $("modalDesc").textContent = c.description;
-  renderDetails(c);
-  renderLessons(c);
-  showModal("courseModal");
-  playVideo(c);
-}
-
-function renderDetails(c) {
-  const meta = [
-    c.category && "📂 " + c.category,
-    c.level && "📊 " + c.level,
-    c.duration && "⏱ " + c.duration,
-    `📚 ${c.lessons.length} lessons`,
-    c.instructor && "🎓 " + c.instructor,
-  ].filter(Boolean);
-  $("modalMeta").innerHTML = meta.map(m => `<span>${esc(m)}</span>`).join("");
-
-  $("modalAbout").innerHTML = c.about ? `<h3>About this course</h3><p>${esc(c.about)}</p>` : "";
-  $("modalOutcomes").innerHTML = c.outcomes?.length
-    ? `<h3>What you'll learn</h3><ul class="outcomes">${c.outcomes.map(o => `<li>${esc(o)}</li>`).join("")}</ul>`
-    : "";
-  $("modalRequirements").innerHTML = c.requirements ? `<h3>Requirements</h3><p>${esc(c.requirements)}</p>` : "";
 }
 
 // ---------- Video player ----------
@@ -454,7 +581,7 @@ async function playVideo(c) {
     $("videoBox").innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>`;
     return;
   }
-  if (openCourseId !== c.id) return; // course was closed while loading
+  if (openCourseId !== c.id) return; // left the course page while loading
 
   watch = { courseId: c.id, seen: new Set(), saving: false };
   // Check twice a second, so even 2x playback speed doesn't miss any seconds
@@ -516,7 +643,6 @@ async function updateLessonsFromWatching(c) {
   try {
     await api.saveLessons(c.id, lessons);
     progress[c.id] = lessons;
-    if (openCourseId === c.id) renderLessons(c);
     refresh();
     if (percent(c) === 100) {
       toast(`🎓 Congratulations! You completed "${c.title}".`, "success");
@@ -538,31 +664,6 @@ function videoEnded(c) {
       toast("Some parts were skipped. Watch the full video to complete every lesson.", "error");
     }
   }, 1500);
-}
-
-function renderLessons(c) {
-  const enrolled = isEnrolled(c.id);
-  const done = progress[c.id] || [];
-
-  // Not enrolled yet: show an Enroll button
-  $("modalEnroll").innerHTML = enrolled
-    ? ""
-    : `<button class="btn" data-enroll="${c.id}">Enroll Free to Track Progress</button>`;
-
-  // Lessons can't be ticked by hand; they complete by watching the video
-  $("lessonList").innerHTML = c.lessons
-    .map(
-      (lesson, i) => `
-      <li class="${done.includes(i) ? "done" : ""}">
-        <span class="lesson-status">${done.includes(i) ? "✅" : "⬜"}</span>
-        <span>Lesson ${i + 1}: ${esc(lesson)}</span>
-      </li>`
-    )
-    .join("");
-  $("modalProgress").style.width = percent(c) + "%";
-  $("modalProgressText").textContent = enrolled
-    ? `${done.length}/${c.lessons.length} done · ${percent(c)}%`
-    : "Enroll to track your progress";
 }
 
 // ---------- Auth modal ----------
@@ -634,25 +735,21 @@ function showModal(id) {
 
 function hideModal(id) {
   $(id).classList.remove("show");
-  if (id === "courseModal") {
-    stopVideo();
-    openCourseId = null;
-  }
 }
 
 // ---------- Event listeners ----------
 document.addEventListener("click", e => {
-  const t = e.target;
+  if (e.target.classList.contains("modal")) return hideModal(e.target.id); // click outside the box
+  const t = e.target.closest("[data-enroll], [data-unenroll], [data-auth], [data-cat], [data-tab], [data-close]");
+  if (!t) return;
   if (t.dataset.enroll) enroll(Number(t.dataset.enroll), t);
   else if (t.dataset.unenroll) unenroll(Number(t.dataset.unenroll), t);
-  else if (t.dataset.open) openCourse(Number(t.dataset.open));
+  else if (t.dataset.auth) openAuth(t.dataset.auth);
   else if (t.dataset.cat) {
-    category = t.dataset.cat;
-    renderCategories();
-    renderCourses();
+    // Keep the link in sync so the filter survives a refresh
+    location.hash = t.dataset.cat === "All" ? "#/courses" : `#/courses/${encodeURIComponent(t.dataset.cat)}`;
   } else if (t.dataset.tab) setAuthMode(t.dataset.tab);
   else if (t.dataset.close) hideModal(t.dataset.close);
-  else if (t.classList.contains("modal")) hideModal(t.id);
 });
 
 document.addEventListener("keydown", e => {
@@ -661,19 +758,12 @@ document.addEventListener("keydown", e => {
 
 $("searchBox").addEventListener("input", renderCourses);
 
-$("loginBtn").addEventListener("click", async () => {
-  if (user) {
-    await api.signOut();
-    toast("Logged out.");
-  } else {
-    openAuth("login");
-  }
+$("logoutBtn").addEventListener("click", async () => {
+  await api.signOut();
+  toast("Logged out.");
 });
 
-$("heroSignup").addEventListener("click", () => openAuth("signup"));
-
 $("menuBtn").addEventListener("click", () => $("navLinks").classList.toggle("open"));
-$("navLinks").addEventListener("click", () => $("navLinks").classList.remove("open"));
 
 // Dark mode
 function applyTheme(theme) {
@@ -694,8 +784,10 @@ function toUser(u) {
 }
 
 async function init() {
-  $("courseList").innerHTML = '<div class="card skeleton"></div>'.repeat(3);
   $("demoBanner").hidden = useSupabase;
+  const skeletons = '<div class="card skeleton"></div>'.repeat(3);
+  $("courseList").innerHTML = skeletons;
+  $("popularCourses").innerHTML = skeletons;
 
   try {
     courses = (await api.getCourses()).map(withDetails);
@@ -709,14 +801,13 @@ async function init() {
     // setTimeout avoids calling Supabase from inside its own callback.
     sb.auth.onAuthStateChange((_event, session) => {
       const u = session?.user;
-      setTimeout(() =>
-        setUser(u ? toUser(u) : null)
-      );
+      setTimeout(() => setUser(u ? toUser(u) : null));
     });
   } else {
     await setUser(store.get("cl_user", null));
   }
   refresh();
+  route();
 }
 
 init();
