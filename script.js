@@ -324,10 +324,6 @@ function renderHome() {
     .join("");
 
   setGrid("popularCourses", courses.slice(0, 3).map(c => courseCard(c)), loadErrorHtml());
-
-  $("footerCategories").innerHTML = categories()
-    .map(cat => `<a href="#/courses/${encodeURIComponent(cat)}">${esc(cat)}</a>`)
-    .join("");
 }
 
 // ---------- Page: Courses ----------
