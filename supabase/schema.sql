@@ -1,5 +1,6 @@
 -- CloudLearn database schema
 -- Run this once in Supabase: Dashboard → SQL Editor → New query → paste → Run
+-- After this, also run update_course_details.sql to add course details.
 
 -- ---------- Courses (public catalog) ----------
 create table if not exists public.courses (
@@ -66,7 +67,7 @@ select * from (values
    array['Variables and Data Types', 'Conditions and Loops', 'Functions', 'Lists and Dictionaries', 'File Handling']),
   ('HTML & CSS Basics', 'Web', 'Beginner', '🌐', '5 hours',
    'Build beautiful web pages with HTML and CSS.',
-   'https://www.youtube.com/embed/G3e-cpL7ofc',
+   'https://www.youtube.com/embed/mU6anWqZJcc',
    array['HTML Structure', 'Text, Links and Images', 'CSS Selectors', 'Flexbox and Grid']),
   ('JavaScript Essentials', 'Web', 'Intermediate', '⚡', '6 hours',
    'Add interactivity to websites using JavaScript.',

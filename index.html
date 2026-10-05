@@ -129,28 +129,6 @@
           <p>Cloud providers offer backups, high availability and security.</p>
         </div>
       </div>
-
-      <h2 class="mt">How It Works</h2>
-      <p class="subtitle">The cloud architecture behind CloudLearn.</p>
-      <div class="architecture">
-        <div class="arch-box">
-          <div class="feature-icon">💻</div>
-          <h3>Student</h3>
-          <p>Uses any browser on a phone or laptop</p>
-        </div>
-        <div class="arch-arrow">→</div>
-        <div class="arch-box">
-          <div class="feature-icon">🌐</div>
-          <h3>Frontend</h3>
-          <p>HTML, CSS, JS hosted on GitHub Pages / Netlify</p>
-        </div>
-        <div class="arch-arrow">→</div>
-        <div class="arch-box">
-          <div class="feature-icon">⚡</div>
-          <h3>Supabase Backend</h3>
-          <p>Auth for login, PostgreSQL database for courses and progress</p>
-        </div>
-      </div>
     </section>
 
     <footer>
@@ -192,12 +170,6 @@
             minlength="6"
             hidden
           />
-          <p id="authHint" class="auth-hint" hidden>
-            👤 Username: 3–20 letters, numbers or _ (for example
-            <strong>avi_j</strong>).<br />
-            🔑 Password: at least 6 characters. Remember it; you'll need it to
-            login.
-          </p>
           <button type="submit" id="authSubmit" class="btn btn-block">Login</button>
         </form>
       </div>
@@ -209,9 +181,14 @@
         <button class="close" data-close="courseModal" aria-label="Close">&times;</button>
         <h2 id="modalTitle"></h2>
         <p id="modalDesc" class="muted"></p>
-        <div class="video-box">
-          <iframe id="modalVideo" allowfullscreen></iframe>
-        </div>
+        <div id="modalMeta" class="course-meta"></div>
+        <div id="videoBox" class="video-box"></div>
+        <p class="video-note muted">▶ Watch the video to the end and the course is marked complete automatically.</p>
+
+        <div id="modalAbout" class="detail-section"></div>
+        <div id="modalOutcomes" class="detail-section"></div>
+        <div id="modalRequirements" class="detail-section"></div>
+
         <div class="lesson-head">
           <h3>Lessons</h3>
           <span id="modalProgressText" class="muted"></span>

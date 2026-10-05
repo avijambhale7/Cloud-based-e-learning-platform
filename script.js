@@ -38,21 +38,39 @@ const store = {
 const DEMO_COURSES = [
   { id: 1, title: "Introduction to Cloud Computing", category: "Cloud", level: "Beginner", icon: "☁️", duration: "4 hours",
     description: "Learn cloud basics: IaaS, PaaS, SaaS and deployment models.", video_url: "https://www.youtube.com/embed/M988_fsOSWo",
+    instructor: "Simplilearn", requirements: "No experience needed.",
+    about: "A beginner-friendly introduction to cloud computing. Understand what the cloud is, why companies use it, and how the main service and deployment models work.",
+    outcomes: ["Explain what cloud computing is", "Compare IaaS, PaaS and SaaS with examples", "Describe public, private and hybrid clouds", "List the main benefits and risks of the cloud"],
     lessons: ["What is Cloud Computing?", "Service Models (IaaS, PaaS, SaaS)", "Deployment Models", "Benefits and Challenges"] },
   { id: 2, title: "AWS for Beginners", category: "Cloud", level: "Beginner", icon: "🟧", duration: "6 hours",
     description: "Get started with Amazon Web Services: EC2, S3 and more.", video_url: "https://www.youtube.com/embed/3hLmDS179YE",
+    instructor: "freeCodeCamp.org", requirements: "Basic computer skills. Introduction to Cloud Computing is recommended first.",
+    about: "Learn the core Amazon Web Services used in the real world, and prepare for the AWS Certified Cloud Practitioner exam.",
+    outcomes: ["Create and secure an AWS account", "Launch virtual servers with EC2", "Store and share files with S3", "Manage users and permissions with IAM"],
     lessons: ["AWS Account Setup", "EC2 Virtual Machines", "S3 Storage", "IAM Users and Roles", "Hosting a Website"] },
   { id: 3, title: "Python Programming", category: "Programming", level: "Beginner", icon: "🐍", duration: "8 hours",
     description: "Master Python from basics to functions and file handling.", video_url: "https://www.youtube.com/embed/_uQrJ0TkZlc",
+    instructor: "Programming with Mosh", requirements: "No programming experience needed.",
+    about: "Learn Python from scratch. It is one of the most popular programming languages, used for web apps, automation, data science and cloud scripting.",
+    outcomes: ["Write and run Python programs", "Use variables, conditions and loops", "Create reusable functions", "Work with lists, dictionaries and files"],
     lessons: ["Variables and Data Types", "Conditions and Loops", "Functions", "Lists and Dictionaries", "File Handling"] },
   { id: 4, title: "HTML & CSS Basics", category: "Web", level: "Beginner", icon: "🌐", duration: "5 hours",
-    description: "Build beautiful web pages with HTML and CSS.", video_url: "https://www.youtube.com/embed/G3e-cpL7ofc",
+    description: "Build beautiful web pages with HTML and CSS.", video_url: "https://www.youtube.com/embed/mU6anWqZJcc",
+    instructor: "freeCodeCamp.org", requirements: "No experience needed.",
+    about: "Build your first web pages. HTML gives a page its structure and CSS makes it look good; together they are the starting point of all web development.",
+    outcomes: ["Structure web pages with HTML5", "Add text, links and images", "Style pages with CSS selectors", "Build layouts with Flexbox and Grid"],
     lessons: ["HTML Structure", "Text, Links and Images", "CSS Selectors", "Flexbox and Grid"] },
   { id: 5, title: "JavaScript Essentials", category: "Web", level: "Intermediate", icon: "⚡", duration: "6 hours",
     description: "Add interactivity to websites using JavaScript.", video_url: "https://www.youtube.com/embed/W6NZfCO5SIk",
+    instructor: "Programming with Mosh", requirements: "Basic HTML & CSS.",
+    about: "Make websites interactive with JavaScript, the programming language of the web.",
+    outcomes: ["Use variables, functions and objects", "Change web pages with the DOM", "Respond to clicks and other events", "Fetch data from online APIs"],
     lessons: ["Variables and Functions", "DOM Manipulation", "Events", "Fetching Data from APIs"] },
   { id: 6, title: "SQL & Databases", category: "Database", level: "Intermediate", icon: "🗄️", duration: "5 hours",
     description: "Understand relational databases and write SQL queries.", video_url: "https://www.youtube.com/embed/HXV3zeQKqGY",
+    instructor: "freeCodeCamp.org", requirements: "No experience needed.",
+    about: "Understand how relational databases store data, and write SQL queries to read and change it, the same skills used with cloud databases like Supabase.",
+    outcomes: ["Understand tables, rows and keys", "Query data with SELECT", "Insert, update and delete records", "Combine tables with joins"],
     lessons: ["What is a Database?", "SELECT Queries", "INSERT, UPDATE, DELETE", "Joins", "Cloud Databases (Supabase / Postgres)"] },
 ];
 
@@ -62,7 +80,31 @@ const DEMO_COURSES = [
 // ("Confirm email" must be OFF in Supabase).
 const USERNAME_DOMAIN = "cloudlearn.app";
 const usernameToEmail = username => `${username}@${USERNAME_DOMAIN}`;
-const isValidUsername = username => /^[a-z0-9_]{3,20}$/.test(username);
+// "Avi Jambhale" → "avi_jambhale" (same result at sign up and login)
+const cleanUsername = text => text.trim().toLowerCase().replace(/\s+/g, "_");
+
+// Returns an error message, or "" if the username is fine
+function usernameProblem(username) {
+  if (!username) return "Please enter a username.";
+  if (username.includes("@")) return "Please enter your username, not an email address.";
+  if (username.length < 3) return "Username is too short. Use at least 3 characters.";
+  if (username.length > 20) return "Username is too long. Use 20 characters or fewer.";
+  if (!/^[a-z0-9_.-]+$/.test(username)) return "Username can only use letters, numbers, _ . or -";
+  if (/^[.-]|[.-]$|\.\./.test(username)) return "Username can't start or end with . or -, or have .. in it.";
+  return "";
+}
+
+// Strong password rules for sign up; returns the list of what's missing
+function passwordProblems(password) {
+  const rules = [
+    [password.length >= 8, "at least 8 characters"],
+    [/[A-Z]/.test(password), "an uppercase letter"],
+    [/[a-z]/.test(password), "a lowercase letter"],
+    [/[0-9]/.test(password), "a number"],
+    [/[^A-Za-z0-9]/.test(password), "a symbol (like @ # ! $)"],
+  ];
+  return rules.filter(([ok]) => !ok).map(([, label]) => label);
+}
 
 // ---------- Backend API ----------
 // Both versions have the same functions, so the rest of the app
@@ -326,12 +368,100 @@ let openCourseId = null;
 
 function openCourse(id) {
   const c = courses.find(x => x.id === id);
+  stopVideo();
   openCourseId = id;
   $("modalTitle").textContent = c.icon + " " + c.title;
   $("modalDesc").textContent = c.description;
-  $("modalVideo").src = c.video_url || "";
+  renderDetails(c);
   renderLessons(c);
   showModal("courseModal");
+  playVideo(c);
+}
+
+function renderDetails(c) {
+  const meta = [
+    c.category && "📂 " + c.category,
+    c.level && "📊 " + c.level,
+    c.duration && "⏱ " + c.duration,
+    `📚 ${c.lessons.length} lessons`,
+    c.instructor && "🎓 " + c.instructor,
+  ].filter(Boolean);
+  $("modalMeta").innerHTML = meta.map(m => `<span>${esc(m)}</span>`).join("");
+
+  $("modalAbout").innerHTML = c.about ? `<h3>About this course</h3><p>${esc(c.about)}</p>` : "";
+  $("modalOutcomes").innerHTML = c.outcomes?.length
+    ? `<h3>What you'll learn</h3><ul class="outcomes">${c.outcomes.map(o => `<li>${esc(o)}</li>`).join("")}</ul>`
+    : "";
+  $("modalRequirements").innerHTML = c.requirements ? `<h3>Requirements</h3><p>${esc(c.requirements)}</p>` : "";
+}
+
+// ---------- Video player ----------
+// Uses the YouTube IFrame API so we know when a video has been watched to the end.
+let player = null;
+let youtubeApi = null;
+
+function loadYouTubeApi() {
+  youtubeApi ??= new Promise((resolve, reject) => {
+    if (window.YT?.Player) return resolve();
+    window.onYouTubeIframeAPIReady = resolve;
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return youtubeApi;
+}
+
+function youtubeId(url) {
+  const match = (url || "").match(/(?:embed\/|watch\?v=|youtu\.be\/)([\w-]{11})/);
+  return match ? match[1] : null;
+}
+
+async function playVideo(c) {
+  const videoId = youtubeId(c.video_url);
+  if (!videoId) return;
+  $("videoBox").innerHTML = '<div id="ytPlayer"></div>';
+  try {
+    await loadYouTubeApi();
+  } catch {
+    // YouTube API blocked: show a plain video (no auto-complete)
+    $("videoBox").innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>`;
+    return;
+  }
+  if (openCourseId !== c.id) return; // course was closed while loading
+  player = new YT.Player("ytPlayer", {
+    videoId,
+    playerVars: { rel: 0 },
+    events: {
+      onStateChange: e => {
+        if (e.data === YT.PlayerState.ENDED) videoFinished(c.id);
+      },
+    },
+  });
+}
+
+function stopVideo() {
+  try {
+    player?.destroy();
+  } catch {}
+  player = null;
+  $("videoBox").innerHTML = "";
+}
+
+// Watching the whole video completes the course
+async function videoFinished(courseId) {
+  const c = courses.find(x => x.id === courseId);
+  if (!c || !user || !isEnrolled(c.id) || percent(c) === 100) return;
+  const allLessons = c.lessons.map((_, i) => i);
+  try {
+    await api.saveLessons(c.id, allLessons);
+    progress[c.id] = allLessons;
+    if (openCourseId === c.id) renderLessons(c);
+    refresh();
+    toast(`🎓 Video finished! "${c.title}" is now complete.`, "success");
+  } catch (err) {
+    toast("Could not save: " + err.message, "error");
+  }
 }
 
 function renderLessons(c) {
@@ -387,8 +517,7 @@ function setAuthMode(mode) {
   $("authName").required = signup;
   $("authConfirm").hidden = !signup;
   $("authConfirm").required = signup;
-  $("authHint").hidden = !signup;
-  $("authPassword").placeholder = signup ? "Create a new password" : "Your CloudLearn password";
+  $("authPassword").placeholder = signup ? "Create a strong password" : "Your CloudLearn password";
   $("authPassword").autocomplete = signup ? "new-password" : "current-password";
   $("authSubmit").textContent = signup ? "Create Account" : "Login";
 }
@@ -396,16 +525,24 @@ function setAuthMode(mode) {
 $("authForm").addEventListener("submit", e => {
   e.preventDefault();
   const name = $("authName").value.trim();
-  const username = $("authUsername").value.trim().toLowerCase();
+  const username = cleanUsername($("authUsername").value);
   const password = $("authPassword").value;
 
-  if (!isValidUsername(username)) {
-    toast("Username must be 3–20 characters: letters, numbers or _ only.", "error");
+  const problem = usernameProblem(username);
+  if (problem) {
+    toast(problem, "error");
     return;
   }
-  if (authMode === "signup" && password !== $("authConfirm").value) {
-    toast("Passwords do not match. Please type the same new password twice.", "error");
-    return;
+  if (authMode === "signup") {
+    const missing = passwordProblems(password);
+    if (missing.length) {
+      toast("Weak password. It needs " + missing.join(", ") + ".", "error");
+      return;
+    }
+    if (password !== $("authConfirm").value) {
+      toast("Passwords do not match. Please type the same new password twice.", "error");
+      return;
+    }
   }
 
   busy($("authSubmit"), async () => {
@@ -434,7 +571,7 @@ function showModal(id) {
 function hideModal(id) {
   $(id).classList.remove("show");
   if (id === "courseModal") {
-    $("modalVideo").src = ""; // stop the video
+    stopVideo();
     openCourseId = null;
   }
 }
