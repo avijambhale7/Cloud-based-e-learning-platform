@@ -1,19 +1,34 @@
--- CloudLearn database schema
--- Run this once in Supabase: Dashboard → SQL Editor → New query → paste → Run
--- After this, also run update_course_details.sql to add course details.
+-- =====================================================
+-- CloudLearn database: everything in one file
+-- Tables, security rules and all 22 courses.
+--
+-- How to use: Supabase Dashboard → SQL Editor → New query → paste this whole file → Run
+-- Safe to run again at any time: it creates what's missing, adds new courses
+-- and updates existing ones. Student accounts and progress are kept.
+-- =====================================================
 
 -- ---------- Courses (public catalog) ----------
 create table if not exists public.courses (
-  id          serial primary key,
-  title       text not null,
-  category    text not null,
-  level       text not null default 'Beginner',
-  icon        text not null default '📘',
-  duration    text,
-  description text,
-  video_url   text,
-  lessons     text[] not null default '{}'
+  id           serial primary key,
+  title        text not null,
+  category     text not null,
+  level        text not null default 'Beginner',
+  icon         text not null default '📘',
+  duration     text,
+  description  text,
+  video_url    text,
+  instructor   text,
+  about        text,
+  outcomes     text[] not null default '{}',
+  requirements text,
+  lessons      text[] not null default '{}'
 );
+
+-- Older databases: add the course detail columns if they're missing
+alter table public.courses add column if not exists instructor   text;
+alter table public.courses add column if not exists about        text;
+alter table public.courses add column if not exists outcomes     text[] not null default '{}';
+alter table public.courses add column if not exists requirements text;
 
 -- ---------- Enrollments (one row per student per course) ----------
 create table if not exists public.enrollments (
@@ -50,35 +65,179 @@ drop policy if exists "Unenroll self" on public.enrollments;
 create policy "Unenroll self" on public.enrollments
   for delete using (auth.uid() = user_id);
 
--- ---------- Sample courses ----------
-insert into public.courses (title, category, level, icon, duration, description, video_url, lessons)
-select * from (values
+-- ---------- All courses ----------
+-- Courses are matched by title: existing ones are updated, new ones are added.
+with data (title, category, level, icon, duration, description, video_url, instructor, about, outcomes, requirements, lessons) as (
+values
   ('Introduction to Cloud Computing', 'Cloud', 'Beginner', '☁️', '4 hours',
    'Learn cloud basics: IaaS, PaaS, SaaS and deployment models.',
-   'https://www.youtube.com/embed/M988_fsOSWo',
+   'https://www.youtube.com/embed/M988_fsOSWo', 'Simplilearn',
+   'A beginner-friendly introduction to cloud computing. Understand what the cloud is, why companies use it, and how the main service and deployment models work.',
+   array['Explain what cloud computing is', 'Compare IaaS, PaaS and SaaS with examples', 'Describe public, private and hybrid clouds', 'List the main benefits and risks of the cloud'],
+   'No experience needed.',
    array['What is Cloud Computing?', 'Service Models (IaaS, PaaS, SaaS)', 'Deployment Models', 'Benefits and Challenges']),
   ('AWS for Beginners', 'Cloud', 'Beginner', '🟧', '6 hours',
    'Get started with Amazon Web Services: EC2, S3 and more.',
-   'https://www.youtube.com/embed/3hLmDS179YE',
+   'https://www.youtube.com/embed/3hLmDS179YE', 'freeCodeCamp.org',
+   'Learn the core Amazon Web Services used in the real world, and prepare for the AWS Certified Cloud Practitioner exam.',
+   array['Create and secure an AWS account', 'Launch virtual servers with EC2', 'Store and share files with S3', 'Manage users and permissions with IAM'],
+   'Basic computer skills. Introduction to Cloud Computing is recommended first.',
    array['AWS Account Setup', 'EC2 Virtual Machines', 'S3 Storage', 'IAM Users and Roles', 'Hosting a Website']),
   ('Python Programming', 'Programming', 'Beginner', '🐍', '8 hours',
    'Master Python from basics to functions and file handling.',
-   'https://www.youtube.com/embed/_uQrJ0TkZlc',
+   'https://www.youtube.com/embed/_uQrJ0TkZlc', 'Programming with Mosh',
+   'Learn Python from scratch. It is one of the most popular programming languages, used for web apps, automation, data science and cloud scripting.',
+   array['Write and run Python programs', 'Use variables, conditions and loops', 'Create reusable functions', 'Work with lists, dictionaries and files'],
+   'No programming experience needed.',
    array['Variables and Data Types', 'Conditions and Loops', 'Functions', 'Lists and Dictionaries', 'File Handling']),
   ('HTML & CSS Basics', 'Web', 'Beginner', '🌐', '5 hours',
    'Build beautiful web pages with HTML and CSS.',
-   'https://www.youtube.com/embed/mU6anWqZJcc',
+   'https://www.youtube.com/embed/mU6anWqZJcc', 'freeCodeCamp.org',
+   'Build your first web pages. HTML gives a page its structure and CSS makes it look good; together they are the starting point of all web development.',
+   array['Structure web pages with HTML5', 'Add text, links and images', 'Style pages with CSS selectors', 'Build layouts with Flexbox and Grid'],
+   'No experience needed.',
    array['HTML Structure', 'Text, Links and Images', 'CSS Selectors', 'Flexbox and Grid']),
   ('JavaScript Essentials', 'Web', 'Intermediate', '⚡', '6 hours',
    'Add interactivity to websites using JavaScript.',
-   'https://www.youtube.com/embed/W6NZfCO5SIk',
+   'https://www.youtube.com/embed/W6NZfCO5SIk', 'Programming with Mosh',
+   'Make websites interactive with JavaScript, the programming language of the web.',
+   array['Use variables, functions and objects', 'Change web pages with the DOM', 'Respond to clicks and other events', 'Fetch data from online APIs'],
+   'Basic HTML & CSS.',
    array['Variables and Functions', 'DOM Manipulation', 'Events', 'Fetching Data from APIs']),
   ('SQL & Databases', 'Database', 'Intermediate', '🗄️', '5 hours',
    'Understand relational databases and write SQL queries.',
-   'https://www.youtube.com/embed/HXV3zeQKqGY',
-   array['What is a Database?', 'SELECT Queries', 'INSERT, UPDATE, DELETE', 'Joins', 'Cloud Databases (Supabase / Postgres)'])
-) as seed
-where not exists (select 1 from public.courses);
+   'https://www.youtube.com/embed/HXV3zeQKqGY', 'freeCodeCamp.org',
+   'Understand how relational databases store data, and write SQL queries to read and change it, the same skills used with cloud databases like Supabase.',
+   array['Understand tables, rows and keys', 'Query data with SELECT', 'Insert, update and delete records', 'Combine tables with joins'],
+   'No experience needed.',
+   array['What is a Database?', 'SELECT Queries', 'INSERT, UPDATE, DELETE', 'Joins', 'Cloud Databases (Supabase / Postgres)']),
+  ('Microsoft Azure Fundamentals (AZ-900)', 'Cloud', 'Beginner', '🔷', '3h 10m',
+   'Learn Microsoft Azure and prepare for the AZ-900 certification.',
+   'https://www.youtube.com/embed/NKEFWyqJ5XA', 'freeCodeCamp.org',
+   'Get to know Microsoft''s cloud platform. This course covers core cloud concepts and the main Azure services, and prepares you for the AZ-900 Azure Fundamentals exam.',
+   array['Explain core cloud concepts on Azure', 'Describe Azure compute, storage and networking', 'Understand Azure security and identity', 'Prepare for the AZ-900 exam'],
+   'Basic computer skills. Introduction to Cloud Computing is recommended first.',
+   array['Cloud Concepts', 'Core Azure Services', 'Security and Identity', 'Pricing and Support']),
+  ('Git & GitHub', 'DevOps', 'Beginner', '🐙', '1h 08m',
+   'Track your code with Git and collaborate on GitHub.',
+   'https://www.youtube.com/embed/RGOj5yH7evk', 'freeCodeCamp.org',
+   'Every developer uses Git. Learn how to save versions of your code, work on branches, and share projects with your team on GitHub.',
+   array['Create repositories and commits', 'Work with branches and merges', 'Push and pull code with GitHub', 'Collaborate using pull requests'],
+   'No experience needed.',
+   array['What is Git?', 'Commits and History', 'Branches and Merging', 'Working with GitHub']),
+  ('Docker for Beginners', 'DevOps', 'Beginner', '🐳', '2h 46m',
+   'Package and run applications in containers with Docker.',
+   'https://www.youtube.com/embed/3c-iBn73dDE', 'TechWorld with Nana',
+   'Containers are how modern cloud apps are shipped. Learn what Docker is, how images and containers work, and how to run multi-container apps.',
+   array['Explain containers vs virtual machines', 'Build and run Docker images', 'Use Docker Compose for multi-container apps', 'Share images with Docker Hub'],
+   'Basic command line knowledge is helpful.',
+   array['Containers vs Virtual Machines', 'Images and Containers', 'Building Your Own Image', 'Docker Compose', 'Docker Hub and Registries']),
+  ('Kubernetes for Beginners', 'DevOps', 'Intermediate', '☸️', '3h 36m',
+   'Deploy and scale containers in the cloud with Kubernetes.',
+   'https://www.youtube.com/embed/X48VuDVv0do', 'TechWorld with Nana',
+   'Kubernetes runs containers at scale in the cloud. Learn its architecture and the main building blocks used to deploy real applications.',
+   array['Understand Kubernetes architecture', 'Create Pods, Deployments and Services', 'Use ConfigMaps and Secrets', 'Deploy a complete application'],
+   'Docker for Beginners is recommended first.',
+   array['Kubernetes Architecture', 'Pods and Deployments', 'Services and Networking', 'ConfigMaps and Secrets', 'Deploying an App']),
+  ('Terraform on AWS', 'DevOps', 'Intermediate', '🏗️', '2h 20m',
+   'Automate your AWS cloud infrastructure with Terraform.',
+   'https://www.youtube.com/embed/SLB_c_ayRMo', 'freeCodeCamp.org',
+   'Infrastructure as Code lets you create cloud servers and networks from a file instead of clicking around. Learn Terraform by building infrastructure on AWS.',
+   array['Explain Infrastructure as Code', 'Write Terraform configuration files', 'Create AWS resources automatically', 'Manage state and variables'],
+   'AWS for Beginners is recommended first.',
+   array['Infrastructure as Code', 'Terraform Basics', 'Creating AWS Resources', 'Variables and State']),
+  ('DevOps Engineering', 'DevOps', 'Intermediate', '♾️', '2h 18m',
+   'Learn the DevOps practices used to ship software fast.',
+   'https://www.youtube.com/embed/j5Zsa_eOXeY', 'freeCodeCamp.org',
+   'DevOps connects development and operations. Learn the culture and tools behind continuous integration, delivery and monitoring.',
+   array['Explain the DevOps lifecycle', 'Understand CI/CD pipelines', 'Know the main DevOps tools', 'Monitor applications in production'],
+   'Git & GitHub is recommended first.',
+   array['What is DevOps?', 'CI/CD Pipelines', 'Infrastructure and Automation', 'Monitoring and Feedback']),
+  ('Java Programming', 'Programming', 'Beginner', '☕', '2h 30m',
+   'Learn Java, a language used in enterprise and Android apps.',
+   'https://www.youtube.com/embed/eIrMbAQSU34', 'Programming with Mosh',
+   'Java powers banking systems, Android apps and large cloud services. Learn the fundamentals and start writing real Java programs.',
+   array['Set up Java and write your first program', 'Use types, variables and operators', 'Control program flow', 'Write clean, reusable code'],
+   'No programming experience needed.',
+   array['Getting Started', 'Types and Variables', 'Control Flow', 'Clean Coding', 'Debugging and Deploying']),
+  ('C++ Programming', 'Programming', 'Beginner', '➕', '4h 01m',
+   'Learn C++ from the ground up.',
+   'https://www.youtube.com/embed/vLnPwxZdW4Y', 'freeCodeCamp.org',
+   'C++ is a fast language used for games, operating systems and high-performance software. Learn the basics step by step.',
+   array['Write and run C++ programs', 'Use variables, conditions and loops', 'Write functions', 'Work with classes and objects'],
+   'No programming experience needed.',
+   array['Setup and First Program', 'Variables and Data Types', 'Conditions and Loops', 'Functions', 'Classes and Objects']),
+  ('Data Structures & Algorithms', 'Programming', 'Intermediate', '🧮', '5h 22m',
+   'Understand the algorithms and data structures behind fast code.',
+   'https://www.youtube.com/embed/8hly31xKli0', 'freeCodeCamp.org',
+   'Learn how to measure and improve the speed of your code, and the classic data structures and algorithms asked about in technical interviews.',
+   array['Measure efficiency with Big O', 'Use linked lists and arrays', 'Implement searching algorithms', 'Implement sorting algorithms'],
+   'Basic Python knowledge. Python Programming is recommended first.',
+   array['Algorithms and Big O', 'Data Structures', 'Searching Algorithms', 'Sorting Algorithms']),
+  ('Machine Learning for Everybody', 'Programming', 'Intermediate', '🤖', '3h 53m',
+   'A friendly introduction to machine learning with Python.',
+   'https://www.youtube.com/embed/i_LwzRVP7bg', 'freeCodeCamp.org',
+   'Machine learning lets computers learn from data. Understand the main ideas and build your first models with Python.',
+   array['Explain what machine learning is', 'Prepare data for training', 'Build classification and regression models', 'Understand neural networks'],
+   'Basic Python knowledge.',
+   array['What is Machine Learning?', 'Preparing Data', 'Classification', 'Regression', 'Neural Networks']),
+  ('React for Beginners', 'Web', 'Intermediate', '⚛️', '1h 20m',
+   'Build modern web interfaces with React.',
+   'https://www.youtube.com/embed/SqcY0GlETPk', 'Programming with Mosh',
+   'React is the most popular library for building web apps. Learn components, state and how to build interactive pages.',
+   array['Create React components', 'Pass data with props', 'Manage state', 'Handle user events'],
+   'JavaScript Essentials is recommended first.',
+   array['Setting Up React', 'Components', 'Props and State', 'Handling Events']),
+  ('Node.js for Beginners', 'Web', 'Intermediate', '🟩', '1h 18m',
+   'Write server-side JavaScript with Node.js.',
+   'https://www.youtube.com/embed/TlB_eWDSMt4', 'Programming with Mosh',
+   'Node.js lets you use JavaScript on the server to build APIs and back ends. Learn its core modules and how it works.',
+   array['Explain how Node.js works', 'Use modules and npm', 'Work with files and events', 'Create a simple web server'],
+   'JavaScript Essentials is recommended first.',
+   array['What is Node.js?', 'Modules', 'Events', 'Building a Web Server']),
+  ('MongoDB Crash Course', 'Database', 'Beginner', '🍃', '29 min',
+   'Store data in documents with the MongoDB NoSQL database.',
+   'https://www.youtube.com/embed/ofme2o29ngU', 'Web Dev Simplified',
+   'MongoDB is a popular NoSQL database that stores data as flexible documents. Learn how it differs from SQL and how to query it.',
+   array['Explain NoSQL vs SQL databases', 'Insert and find documents', 'Update and delete documents', 'Filter and sort results'],
+   'No experience needed. SQL & Databases is helpful.',
+   array['What is MongoDB?', 'Inserting and Finding Data', 'Updating and Deleting', 'Queries and Filters']),
+  ('Linux for Beginners', 'IT & Security', 'Beginner', '🐧', '6h 07m',
+   'Learn Linux, the operating system that runs most cloud servers.',
+   'https://www.youtube.com/embed/sWbUDq4S6Y8', 'freeCodeCamp.org',
+   'Almost every cloud server runs Linux. Learn to use the command line, manage files and users, and feel at home on a server.',
+   array['Use the Linux command line', 'Manage files and permissions', 'Install and manage software', 'Understand users and processes'],
+   'No experience needed.',
+   array['Introduction to Linux', 'The Command Line', 'Files and Permissions', 'Software and Packages', 'Users and Processes']),
+  ('Computer Networking', 'IT & Security', 'Beginner', '🌐', '9h 24m',
+   'Understand how computers and the internet communicate.',
+   'https://www.youtube.com/embed/qiQR5rTSshw', 'freeCodeCamp.org',
+   'Networking is the foundation of the cloud and the internet. Learn how data travels between devices, and prepare for the CompTIA Network+ exam.',
+   array['Explain the OSI and TCP/IP models', 'Understand IP addressing and subnets', 'Describe routers, switches and protocols', 'Troubleshoot network problems'],
+   'No experience needed.',
+   array['Networking Basics', 'OSI and TCP/IP Models', 'IP Addressing', 'Network Devices', 'Troubleshooting']),
+  ('Cyber Security Basics', 'IT & Security', 'Beginner', '🔐', '4h 58m',
+   'Learn how to protect systems and data from attacks.',
+   'https://www.youtube.com/embed/U_P23SqJaDc', 'My CS',
+   'Cyber security keeps data and cloud systems safe. Learn about common threats, how attacks work, and how to defend against them.',
+   array['Explain common cyber threats', 'Understand how attacks work', 'Use basic security tools', 'Follow security best practices'],
+   'No experience needed.',
+   array['Introduction to Cyber Security', 'Common Threats', 'Networks and Security', 'Protecting Systems'])
+),
+updated as (
+  update public.courses c set
+    category = d.category, level = d.level, icon = d.icon, duration = d.duration,
+    description = d.description, video_url = d.video_url, instructor = d.instructor,
+    about = d.about, outcomes = d.outcomes, requirements = d.requirements, lessons = d.lessons
+  from data d
+  where c.title = d.title
+  returning c.id
+)
+insert into public.courses
+  (title, category, level, icon, duration, description, video_url, instructor, about, outcomes, requirements, lessons)
+select title, category, level, icon, duration, description, video_url, instructor, about, outcomes, requirements, lessons
+from data d
+where not exists (select 1 from public.courses c where c.title = d.title);
 
--- Tell the Supabase API to pick up the new tables right away
+-- Tell the Supabase API to pick up the changes right away
 notify pgrst, 'reload schema';

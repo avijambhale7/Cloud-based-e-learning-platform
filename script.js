@@ -286,7 +286,7 @@ const demoApi = {
 const api = useSupabase ? supabaseApi : demoApi;
 
 // Fill in course details from the built-in list when the database doesn't have them
-// (for example if supabase/update_course_details.sql hasn't been run yet)
+// (for example if supabase/schema.sql hasn't been run again since courses were added)
 function withDetails(course) {
   const extra = DEMO_COURSES.find(d => d.title === course.title);
   if (!extra) return course;

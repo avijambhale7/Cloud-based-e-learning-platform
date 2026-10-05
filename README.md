@@ -51,7 +51,7 @@ supabase/schema.sql   → database tables, security rules and sample courses
 ## Supabase Setup (free, about 5 minutes)
 1. Go to https://supabase.com, sign in with GitHub and click **New project** (free plan).
 2. When it's ready, open **SQL Editor → New query**, paste everything from `supabase/schema.sql`, and click **Run**.
-   This creates the tables, security rules and 6 sample courses.
+   This creates the tables, security rules and all 22 courses. It is safe to run again whenever courses are added.
 3. Open **Project Settings → API** and copy the **Project URL** and the **anon public** key.
 4. Paste them into `config.js`:
    ```js
